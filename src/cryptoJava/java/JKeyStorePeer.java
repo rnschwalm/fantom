@@ -13,12 +13,14 @@ import fan.concurrent.ConcurrentMap;
 import fan.crypto.Cert;
 import fanx.interop.Interop;
 
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 import java.io.InputStream;
 import java.io.IOException;
-
+import java.security.PKCS12Attribute;
 import java.security.KeyStore.Entry;
 import java.security.KeyStore.PrivateKeyEntry;
 import java.security.KeyStore.PasswordProtection;
@@ -186,12 +188,15 @@ public class JKeyStorePeer
               Certificate[] certs = new Certificate[chain.length];
               for (int i = 0; i < chain.length; ++i)
               {
-
                 certs[i] = ((X509)X509.load(chain[i].encoded().in()).first()).cert;
               }
 
+              // Get attributes from the attrs map
+              Map fanAttrs = (Map)privKeyEntry.attrs;
+              Set<Entry.Attribute> jattrs = toJavaAttrs(fanAttrs);
+
               // store entry
-              ks.setEntry(alias, new PrivateKeyEntry(privKey.priv(), certs), protection);
+              ks.setEntry(alias, new PrivateKeyEntry(privKey.priv(), certs, jattrs), protection);
             }
             else if (entry instanceof JTrustEntry)
             {
@@ -211,6 +216,30 @@ public class JKeyStorePeer
     }
     catch (Err e) { throw e; }
     catch (Exception e) { throw Err.make(e); }
+  }
+
+  private static Set<Entry.Attribute> toJavaAttrs(Map fanAttrs)
+  {
+    if (fanAttrs == null || fanAttrs.isEmpty())
+      return Collections.emptySet();
+
+    Set<Entry.Attribute> jattrs = new HashSet<>();
+    fanAttrs.each(new Func.Indirect2() {
+      public Object call(Object val, Object key)
+      {
+        try
+        {
+          jattrs.add(new PKCS12Attribute((String)key, (String)val));
+        }
+        catch (Exception e)
+        {
+          throw Err.make(e);
+        }
+        return null;
+      }
+    });
+
+    return jattrs;
   }
 }
 

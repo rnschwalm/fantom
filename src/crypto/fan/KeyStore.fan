@@ -52,7 +52,12 @@ const mixin KeyStore
   virtual Bool containsAlias(Str alias) { get(alias, false) != null }
 
   ** Adds a `PrivKeyEntry` to the keystore with the given alias and returns it.
-  abstract This setPrivKey(Str alias, PrivKey priv, Cert[] chain)
+  **
+  ** Optionally add entry attributes (recommended attribute names are ASN.1 OIDs):
+  **
+  **  ["1.3.6.1.4.1.99999.1": "Custom attribute",
+  **   "1.2.840.113549.1.9.20": "friendlyName"]
+  abstract This setPrivKey(Str alias, PrivKey priv, Cert[] chain, [Str:Str] attrs := [:])
 
   ** Adds a `TrustEntry` to the keystore with the given alias and returns it.
   abstract This setTrust(Str alias, Cert cert)
