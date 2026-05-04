@@ -9,6 +9,7 @@ package fan.util;
 
 import java.io.PrintStream;
 import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 import fan.sys.*;
 
 public abstract class NativeConsole extends Console
@@ -263,6 +264,17 @@ public abstract class NativeConsole extends Console
       try
       {
         return (String)readLine.invoke(reader, new Object[] { msg });
+      }
+      catch (InvocationTargetException e)
+      {
+        Throwable cause = e.getCause();
+        if (cause == null) cause = e;
+
+        // catch Ctrl+C to perform VM shutdown
+        if (cause.getClass().getName().endsWith("UserInterruptException"))
+           Env.cur().exit(1);
+
+        throw Err.make(cause);
       }
       catch (Exception e)
       {
