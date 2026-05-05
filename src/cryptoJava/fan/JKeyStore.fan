@@ -49,9 +49,9 @@ const class JKeyStore : KeyStore
     return null
   }
 
-  override This setPrivKey(Str alias, PrivKey privKey, Cert[] chain)
+  override This setPrivKey(Str alias, PrivKey privKey, Cert[] chain, [Str:Str] attrs := [:])
   {
-    set(alias, JPrivKeyEntry(privKey, chain))
+    set(alias, JPrivKeyEntry(privKey, chain, attrs))
   }
 
   override This setTrust(Str alias, Cert cert)
