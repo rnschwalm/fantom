@@ -8,6 +8,8 @@
 package fan.util;
 
 import java.io.PrintStream;
+import java.lang.Enum;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import fan.sys.*;
@@ -208,18 +210,52 @@ public abstract class NativeConsole extends Console
   {
     Jline3Console() throws Exception
     {
-      // TerminalBuilder.terminal()
-      Class terminalBuilder = Class.forName("org.jline.terminal.TerminalBuilder");
-      this.terminal  = terminalBuilder.getMethod("terminal", new Class[] {}).invoke(null);
+      // Use reflection to avoid depending on jline in builds:
+      //
+      //   Terminal terminal = TerminalBuilder.terminal();
+      //   DefaultParser parser = new DefaultParser();
+      //   parser.setEscapeChars(null);
+      //   LineReader reader = LineReaderBuilder.builder()
+      //     .parser(parser)
+      //     .build();
+      //   reader.setOpt(LineReader.Option.DISABLE_EVENT_EXPANSION)
 
-      // reader = LineReaderBuilder.builder().build()
-      Class builderClass  = Class.forName("org.jline.reader.LineReaderBuilder");
-      Class readerClass   = Class.forName("org.jline.reader.LineReader");
-      Method builderCtor  = builderClass.getMethod("builder", new Class[] {});
-      Method builderBuild = builderClass.getMethod("build", new Class[] {});
-      this.reader         = builderBuild.invoke(builderCtor.invoke(null));
-      this.readLine       = readerClass.getMethod("readLine", new Class[] { String.class });
-      this.readLineMask   = readerClass.getMethod("readLine", new Class[] { String.class, Character.class });
+      // Resolve all classes
+      Class terminalBuilder = Class.forName("org.jline.terminal.TerminalBuilder");
+      Class builderClass    = Class.forName("org.jline.reader.LineReaderBuilder");
+      Class readerClass     = Class.forName("org.jline.reader.LineReader");
+      Class parserIface     = Class.forName("org.jline.reader.Parser");
+      Class defaultParser   = Class.forName("org.jline.reader.impl.DefaultParser");
+      Class optionEnum      = Class.forName("org.jline.reader.LineReader$Option");
+
+      // Resolve all methods
+      Method terminalCreate  = terminalBuilder.getMethod("terminal", new Class[] {});
+      Method builderCtor     = builderClass.getMethod("builder", new Class[] {});
+      Method builderParser   = builderClass.getMethod("parser", new Class[] { parserIface });
+      Method builderBuild    = builderClass.getMethod("build", new Class[] {});
+      Method setOpt          = readerClass.getMethod("setOpt", new Class[] { optionEnum });
+      Method setEscapeChars  = defaultParser.getMethod("setEscapeChars", new Class[] { char[].class });
+      Constructor parserCtor = defaultParser.getConstructor(new Class[] {}).getDeclaringClass().getConstructor();
+
+      // Build parser: new DefaultParser(); parser.setEscapeChars(null);
+      Object parser = defaultParser.getConstructor(new Class[] {}).newInstance();
+      setEscapeChars.invoke(parser, new Object[] { null });
+
+      // Build terminal: TerminalBuilder.terminal()
+      this.terminal = terminalCreate.invoke(null);
+
+      // Build reader: LineReaderBuilder.builder().parser(parser).build()
+      Object builder = builderCtor.invoke(null);
+      builder = builderParser.invoke(builder, new Object[] { parser });
+      this.reader = builderBuild.invoke(builder);
+
+      // reader.setOpt(LineReader.Option.DISABLE_EVENT_EXPANSION)
+      Object disableEventExp = Enum.valueOf(optionEnum, "DISABLE_EVENT_EXPANSION");
+      setOpt.invoke(this.reader, new Object[] { disableEventExp });
+
+      // Cache readLine methods
+      this.readLine     = readerClass.getMethod("readLine", new Class[] { String.class });
+      this.readLineMask = readerClass.getMethod("readLine", new Class[] { String.class, Character.class });
     }
 
     public Long width()
