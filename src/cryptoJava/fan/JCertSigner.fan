@@ -4,6 +4,7 @@
 //
 // History:
 //   17 Aug 2021 Matthew Giannini   Creation
+//   16 Apr 2026 Ross Schwalm       Add decoding for SubjectAlternativeName V3 Extension
 //
 
 using asn1
@@ -26,6 +27,12 @@ class JCertSigner : CertSigner
     // we start off as self-signed certificate
     this.caPrivKey = csr.priv
     this.issuerDn  = subjectDn
+
+    // Add Subject Alternative Names from CSR to certificate
+    csr.subjectAltNames.each |san|
+    {
+      SubjectAltNames.encodeName(San.fromValue(san), subjectAltNames)
+    }
   }
 
   private const JCsr csr
@@ -97,7 +104,7 @@ class JCertSigner : CertSigner
     sans := subjectAltNames.toSeq
     if (!sans.isEmpty)
     {
-      this.exts.add(V3Ext(Asn.oid("2.5.29.17"), sans))
+      this.exts.add(SubjectAltNames.makeExt(sans))
     }
   }
 
@@ -211,22 +218,7 @@ class JCertSigner : CertSigner
 
   override This subjectAltName(Obj name)
   {
-    if (name is Str)
-    {
-      // dNSName [2] IA5String
-      subjectAltNames.add(Asn.tag(AsnTag.context(2).implicit).str(name, AsnTag.univIa5Str))
-    }
-    else if (name is Uri)
-    {
-      // uniformResourceIdentifier [6] IA5String
-      subjectAltNames.add(Asn.tag(AsnTag.context(6).implicit).str(name.toStr, AsnTag.univIa5Str))
-    }
-    else if (name is IpAddr)
-    {
-      // iPAddress [7] OCTET STRING
-      subjectAltNames.add(Asn.tag(AsnTag.context(7).implicit).octets(((IpAddr)name).bytes))
-    }
-    else throw UnsupportedErr("Unsupported type for SAN: $name ($name.typeof)")
+    SubjectAltNames.encodeName(San.fromValue(name), subjectAltNames)
     return this
   }
 
@@ -337,3 +329,180 @@ const class BasicConstraints : V3Ext
   }
 }
 
+// SubjectAlternativeName ::= GeneralNames
+//
+// GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
+//
+// GeneralName ::= CHOICE {
+//      otherName                 [0]  AnotherName,
+//      rfc822Name                [1]  IA5String,
+//      dNSName                   [2]  IA5String,
+//      x400Address               [3]  ORAddress,
+//      directoryName             [4]  Name,
+//      ediPartyName              [5]  EDIPartyName,
+//      uniformResourceIdentifier [6]  IA5String,
+//      iPAddress                 [7]  OCTET STRING,
+//      registeredID              [8]  OBJECT IDENTIFIER }
+//
+// -- AnotherName replaces OTHER-NAME ::= TYPE-IDENTIFIER, as
+// -- TYPE-IDENTIFIER is not supported in the '88 ASN.1 syntax
+//
+// AnotherName ::= SEQUENCE {
+//     type-id    OBJECT IDENTIFIER,
+//     value      [0] EXPLICIT ANY DEFINED BY type-id }
+//
+// EDIPartyName ::= SEQUENCE {
+//      nameAssigner              [0]  DirectoryString OPTIONAL,
+//      partyName                 [1]  DirectoryString }
+**
+** Models a SubjectAlternativeName V3 extension.
+**
+@NoDoc
+const class SubjectAltNames : V3Ext
+{
+  ** Create a SubjectAltName V3 extension from a sequence of GeneralNames
+  static V3Ext makeExt(AsnSeq generalNames)
+  {
+    return V3Ext.makeSpec(Asn.oid("2.5.29.17"), generalNames)
+  }
+
+  ** Encode a single name into an AsnCollBuilder.
+  static Void encodeName(San san, AsnCollBuilder builder)
+  {
+    builder.add(toAsn(san))
+  }
+
+  ** Encode a list of names into a GeneralNames sequence
+  static AsnSeq encodeNames(Obj[] names)
+  {
+    builder := AsnColl.builder
+    names.each |name| { encodeName(name, builder) }
+    return builder.toSeq
+  }
+
+  ** Decode a GeneralNames sequence into a list of San objects.
+  static San[] decodeNames(AsnSeq generalNames)
+  {
+    result := San[,]
+
+    generalNames.vals.each |AsnObj name|
+    {
+      // Check the context tag to determine the type
+      if (name.tag.cls.isContext)
+      {
+        tagId := name.tag.id
+        try
+        {
+          san := fromAsn(tagId, name)
+          result.add(san)
+        }
+        // skip unsupported types
+        catch (Err e) { }
+      }
+    }
+
+    return result
+  }
+
+  new makeSpec(AsnOid extnId, AsnColl extnVal, Bool critical := false)
+    : super.makeSpec(extnId, extnVal, critical)
+  {
+  }
+
+  new make(AsnObj[] items) : super(items)
+  {
+  }
+
+//////////////////////////////////////////////////////////////////////////
+// Asn Encoding/Decoding
+//////////////////////////////////////////////////////////////////////////
+
+  private static AsnObj toAsn(San san)
+  {
+    tagId := ((SanType)san.type).tagId
+    switch(san.type)
+    {
+      case SanType.rfc822Name:
+      case SanType.dNSName:
+      case SanType.uniformResourceIdentifier:
+        return Asn.tag(AsnTag.context(tagId).implicit).str((Str)(san.val), AsnTag.univIa5Str)
+
+      case SanType.iPAddress:
+        return Asn.tag(AsnTag.context(tagId).implicit).octets(((IpAddr)san.val).bytes)
+
+      case SanType.registeredID:
+        return Asn.tag(AsnTag.context(tagId).implicit).oid((Str)san.val)
+
+      case SanType.otherName:
+      case SanType.directoryName:
+      case SanType.x400Address:
+      case SanType.ediPartyName:
+      default:
+        throw UnsupportedErr("Encoding SanType ${san.type.text} (tag ${tagId}) not supported")
+    }
+  }
+
+  static San fromAsn(Int tagId, AsnObj name)
+  {
+    type := SanType.fromTagId(tagId)
+    switch (type)
+    {
+      case SanType.otherName:
+        if (name is AsnBin) return San.other(((AsnBin)name).buf)
+        throw ParseErr("Cannot decode SanType.otherName")
+
+      case SanType.rfc822Name:
+        if (name is AsnBin) return San.email(((AsnBin)name).decode(Asn.str("", AsnTag.univIa5Str)).str)
+        return San.email(name.str)
+      case SanType.dNSName:
+        if (name is AsnBin) return San.dns(((AsnBin)name).decode(Asn.str("", AsnTag.univIa5Str)).str)
+        return San.dns(name.str)
+      case SanType.uniformResourceIdentifier:
+        if (name is AsnBin) return San.uri(((AsnBin)name).decode(Asn.str("", AsnTag.univIa5Str)).str)
+        return San.uri(name.str)
+
+      case SanType.directoryName:
+        if (name is AsnBin)
+        {
+          buf := ((AsnBin)name).buf
+          try
+          {
+            dnSeq := BerReader(buf.in).readObj as AsnSeq
+            if (dnSeq != null)
+              return San.dn(Dn(dnSeq).toX500)
+          }
+          catch (Err e) { }
+        }
+        return San.dn(Dn(name.toStr).toX500)
+
+      case SanType.iPAddress:
+        buf := name.buf
+        if (buf.size == 0) throw ParseErr("Cannot decode SanType.iPAddress")
+        return San.ip(IpAddr.makeBytes(buf))
+
+      case SanType.registeredID:
+
+        if (name is AsnBin)
+        {
+          contentBuf := ((AsnBin)name).buf
+
+          // Build a proper OID structure: tag (0x06) + length + content
+          oidBuf := Buf()
+          oidBuf.write(0x06)  // OID tag
+          oidBuf.write(contentBuf.size)  // Length
+          oidBuf.writeBuf(contentBuf)  // Content
+
+          oidBuf.flip
+          oid := BerReader(oidBuf.in).readObj
+          if (oid is AsnOid) return San.registeredID(oid)
+        }
+        else if (name.isOid) return San.registeredID(name.oid)
+        throw ParseErr("Cannot decode SanType.registeredID")
+
+      case SanType.x400Address:
+      case SanType.ediPartyName:
+      default:
+        throw UnsupportedErr("Unsupported SanType: ${type.name}")
+    }
+  }
+}
