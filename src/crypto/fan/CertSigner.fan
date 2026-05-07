@@ -62,6 +62,6 @@ mixin CertSigner
   **  - 'Str': DNS name
   **  - 'Uri': Uniform Resource Identifier name
   **  - 'IpAddr': IP address name
-  **  - 'Map': Must have value (Obj) and type (SubjectAltNameType)
+  **  - 'San': San Instance 
   abstract This subjectAltName(Obj name)
 }
