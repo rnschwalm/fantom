@@ -59,8 +59,11 @@ mixin CertSigner
   ** Add a Subject Alternative Name to the certificate. This
   ** method may be called multiple times to add different SANs.
   ** The 'name' may be one of the following types:
-  **  - 'Str': a DNS name
-  **  - 'Uri': a Uniform Resource Identifier name
-  **  - 'IpAddr': an IP address name
+  **  - 'Str': DNS name
+  **  - 'Uri': Uniform Resource Identifier name
+  **  - 'IpAddr': IP address name
+  **  - 'AsnOid': Registered ID
+  **  - 'San': San Instance
+  ** Only San.name, San.ip, San.uri, San.email, and San.registeredID are supported
   abstract This subjectAltName(Obj name)
 }
