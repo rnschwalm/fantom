@@ -62,6 +62,8 @@ mixin CertSigner
   **  - 'Str': DNS name
   **  - 'Uri': Uniform Resource Identifier name
   **  - 'IpAddr': IP address name
-  **  - 'San': San Instance 
+  **  - 'AsnOid': Registered ID
+  **  - 'San': San Instance
+  ** Only San.name, San.ip, San.uri, San.email, and San.registeredID are supported
   abstract This subjectAltName(Obj name)
 }

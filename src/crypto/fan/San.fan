@@ -18,11 +18,21 @@ const class San
 // Construction
 //////////////////////////////////////////////////////////////////////////
 
+  ** Create a San with 'type' SanType.dNSName
   static new dns(Str name) { San(SanType.dNSName, name) }
+
+  ** Create a San with 'type' SanType.rfc822Name
   static new email(Str email) { San(SanType.rfc822Name, email) }
-  static new other(Buf buf) { San(SanType.otherName, buf.toImmutable) }
+
+  ** Create a San with 'type' SanType.directoryName
   static new dn(Str dn) { San(SanType.directoryName, dn) }
 
+  ** Create a San with 'type' SanType.otherName
+  static new other(Buf buf) { San(SanType.otherName, buf.toImmutable) }
+
+  ** Create a San with 'type' SanType.iPAddress - Accepts Str or IpAddr
+  **
+  ** 'val' stored as IpAddr
   static new ip(Obj ip)
   {
     IpAddr := Type.find("inet::IpAddr")
@@ -31,6 +41,9 @@ const class San
     throw ArgErr("Parameter must be IpAddr or Str")
   }
 
+  ** Create a San with 'type' SanType.uniformResourceIdentifier - Accepts Str or Uri
+  **
+  ** 'val' stored as Str
   static new uri(Obj uri)
   {
     //Store uri as a string to avoid trailing slash getting added
@@ -43,6 +56,9 @@ const class San
     throw ArgErr("Parameter must be Uri or Str")
   }
 
+  ** Create a San with 'type' SanType.registeredID - Accepts Str or AsnOid
+  **
+  ** 'val' stored as Str
   static new registeredID(Obj oid)
   {
     if (oid is AsnOid) return San(SanType.registeredID, ((AsnOid)oid).oidStr)
