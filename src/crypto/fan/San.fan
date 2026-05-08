@@ -18,36 +18,32 @@ const class San
 // Construction
 //////////////////////////////////////////////////////////////////////////
 
-  static San dns(Str name) { San(SanType.dNSName, name) }
-  static San email(Str email) { San(SanType.rfc822Name, email) }
-  static San other(Buf buf) { San(SanType.otherName, buf.toImmutable) }
-  static San dn(Str dn) { San(SanType.directoryName, dn) }
+  static new dns(Str name) { San(SanType.dNSName, name) }
+  static new email(Str email) { San(SanType.rfc822Name, email) }
+  static new other(Buf buf) { San(SanType.otherName, buf.toImmutable) }
+  static new dn(Str dn) { San(SanType.directoryName, dn) }
 
-  static San ip(Obj ip)
+  static new ip(Obj ip)
   {
     IpAddr := Type.find("inet::IpAddr")
-    if (ip is Str) return San(SanType.iPAddress, IpAddr.make([(Str)ip]))
+    if (ip is Str) return San(SanType.iPAddress, IpAddr.make([ip]))
     else if (IpAddr.fits(ip.typeof)) return San(SanType.iPAddress, ip)
     throw ArgErr("Parameter must be IpAddr or Str")
   }
 
-  static San uri(Obj uri)
+  static new uri(Obj uri)
   {
     //Store uri as a string to avoid trailing slash getting added
-    if (uri is Uri)
+    if (uri is Str)
     {
-      if (((Uri)uri).isRel) throw ArgErr("Parameter must not be a relative Uri")
+      if (Uri.fromStr(uri).isRel) throw ArgErr("Parameter must not be a relative Uri")
       return San(SanType.uniformResourceIdentifier, uri.toStr)
     }
-    else if (uri is Str)
-    {
-      if (Uri.fromStr((Str)uri).isRel) throw ArgErr("Parameter must not be a relative Uri")
-      return San(SanType.uniformResourceIdentifier, uri)
-    }
+    else if (uri is Uri) return San.uri(uri.toStr)
     throw ArgErr("Parameter must be Uri or Str")
   }
 
-  static San registeredID(Obj oid)
+  static new registeredID(Obj oid)
   {
     if (oid is AsnOid) return San(SanType.registeredID, ((AsnOid)oid).oidStr)
     else if (oid is Str) return San(SanType.registeredID, (Str)oid)
@@ -60,6 +56,15 @@ const class San
     this.val = val
   }
 
+  ** Convenience for creating a San from a value.
+  **
+  ** The 'value' may be one of the following types:
+  **  - 'Str':    returns San.dns
+  **  - 'Uri':    returns San.uri
+  **  - 'AsnOid': returns San.registeredID
+  **  - 'Buf':    returns San.other
+  **  - 'IpAddr': returns San.ip
+  **  - 'San':    returns itself
   static new fromValue(Obj value)
   {
     if (value is Str)         return San.dns(value)

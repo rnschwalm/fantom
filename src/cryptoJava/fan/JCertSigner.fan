@@ -419,19 +419,19 @@ const class SubjectAltNames : V3Ext
 
   private static AsnObj toAsn(San san)
   {
-    tagId := ((SanType)san.type).tagId
+    tagId := san.type.tagId
     switch(san.type)
     {
       case SanType.rfc822Name:
       case SanType.dNSName:
       case SanType.uniformResourceIdentifier:
-        return Asn.tag(AsnTag.context(tagId).implicit).str((Str)(san.val), AsnTag.univIa5Str)
+        return Asn.tag(AsnTag.context(tagId).implicit).str(san.val, AsnTag.univIa5Str)
 
       case SanType.iPAddress:
         return Asn.tag(AsnTag.context(tagId).implicit).octets(((IpAddr)san.val).bytes)
 
       case SanType.registeredID:
-        return Asn.tag(AsnTag.context(tagId).implicit).oid((Str)san.val)
+        return Asn.tag(AsnTag.context(tagId).implicit).oid(san.val)
 
       case SanType.otherName:
       case SanType.directoryName:
